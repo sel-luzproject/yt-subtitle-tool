@@ -22,7 +22,6 @@ python app/server.py        # 開啟 http://127.0.0.1:8420，依設定精靈輸�
 python packaging/build_dist.py     # 在 %LOCALAPPDATA%\YTSubtitleBuild 組出可搬移資料夾（含獨立 Python）
 ISCC.exe "/DBuildDir=%LOCALAPPDATA%\YTSubtitleBuild\YT字幕機" packaging/installer.iss
 ```
-建置資料夾刻意放在 OneDrive 之外，避免同步程式鎖檔。
 
 ## 架構
 | 檔案 | 作用 |
