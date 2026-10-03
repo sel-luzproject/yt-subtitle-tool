@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>YT 字幕機 使用說明</title>
+<style>
+  body { font-family: "Microsoft JhengHei", "Segoe UI", sans-serif; max-width: 820px; margin: 0 auto; padding: 32px 20px 80px;
+         line-height: 1.8; color: #222; background: #fafafa; }
+  h1 { font-size: 26px; border-bottom: 3px solid #4a6cf7; padding-bottom: 10px; }
+  h2 { font-size: 20px; margin-top: 40px; color: #2d46b9; }
+  h3 { font-size: 16px; margin-top: 24px; }
+  code, kbd { background: #eceef5; padding: 1px 6px; border-radius: 4px; font-size: 0.92em; }
+  .box { background: #fff; border: 1px solid #dde; border-radius: 8px; padding: 14px 18px; margin: 14px 0; }
+  .warn { background: #fff6e5; border-color: #f0c36d; }
+  .ok { background: #eaf7ee; border-color: #8fd0a2; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; background: #fff; }
+  th, td { border: 1px solid #dde; padding: 8px 12px; text-align: left; vertical-align: top; }
+  th { background: #eef0fa; }
+  ol li, ul li { margin: 4px 0; }
+  .toc a { text-decoration: none; color: #2d46b9; }
+</style>
+</head>
+<body>
+
+<h1>YT 字幕機 使用說明</h1>
+<p>YT 字幕機會自動下載你 YouTube 頻道的影片音訊，用 AI 轉成字幕（語音辨識），再請 Gemini 校正同音錯字，最後讓你在網頁介面快速校對、匯出標準 SRT 字幕檔，可直接上傳到 YouTube。</p>
+
+<div class="box toc">
+<b>目錄</b>
+<ol>
+  <li><a href="#req">系統需求</a></li>
+  <li><a href="#install">安裝與第一次啟動</a></li>
+  <li><a href="#apikey">申請 Gemini API Key</a></li>
+  <li><a href="#setup">初次設定</a></li>
+  <li><a href="#queue">挑選影片並開始處理</a></li>
+  <li><a href="#quota">處理速度與每日額度</a></li>
+  <li><a href="#review">校對字幕與匯出</a></li>
+  <li><a href="#upload">把字幕上傳到 YouTube</a></li>
+  <li><a href="#faq">常見問題</a></li>
+  <li><a href="#notes">注意事項</a></li>
+</ol>
+</div>
+
+<h2 id="req">1. 系統需求</h2>
+<table>
+  <tr><th>項目</th><th>需求</th></tr>
+  <tr><td>作業系統</td><td>Windows 10 / 11（64 位元）</td></tr>
+  <tr><td>顯示卡</td><td><b>必須有 NVIDIA 顯示卡</b>（建議 RTX 3050 以上、顯示記憶體 4GB 以上），並安裝最新版 <a href="https://www.nvidia.com/download/index.aspx" target="_blank">NVIDIA 驅動程式</a>。沒有 NVIDIA 顯示卡的電腦（包含只有內顯、AMD 顯卡、Mac）無法使用。</td></tr>
+  <tr><td>硬碟空間</td><td>建議預留 8GB 以上（程式約 2.3GB、語音辨識模型約 1.6GB，另加音檔與字幕）</td></tr>
+  <tr><td>網路</td><td>需要連線（下載影片音訊、下載模型、呼叫 Gemini）</td></tr>
+  <tr><td>帳號</td><td>一組你自己的 Google 帳號，用來免費申請 Gemini API Key</td></tr>
+</table>
+
+<h2 id="install">2. 安裝與第一次啟動</h2>
+<ol>
+  <li>雙擊 <code>YT字幕機_安裝程式_v1.0.0.exe</code>，依畫面指示安裝（不需要系統管理員權限）。</li>
+  <li>
+    <b>如果 Windows 跳出藍色「Windows 已保護您的電腦」視窗：</b>這是因為安裝檔尚未購買商業程式碼簽章憑證，屬於正常現象。請點「<b>更多資訊</b>」→「<b>仍要執行</b>」即可。
+  </li>
+  <li>安裝完成後，雙擊桌面（或開始功能表）的「<b>YT字幕機</b>」捷徑。會跳出一個黑色視窗，並自動開啟瀏覽器。</li>
+</ol>
+<div class="warn box">
+  <b>黑色視窗請不要關閉</b>——它就是程式本身。要結束程式時再關閉它即可。如果瀏覽器沒有自動開啟，請手動輸入網址 <code>http://127.0.0.1:8420</code>。
+</div>
+
+<h2 id="apikey">3. 申請 Gemini API Key（免費）</h2>
+<ol>
+  <li>用瀏覽器開啟 <a href="https://aistudio.google.com/apikey" target="_blank">https://aistudio.google.com/apikey</a>，登入你的 Google 帳號。</li>
+  <li>點「<b>建立 API 金鑰</b>」（Create API key），依畫面選擇或建立專案。</li>
+  <li>複製產生的金鑰（一串以 <code>AIza</code> 開頭的文字）。</li>
+</ol>
+<div class="warn box">
+  請把 API Key 當成密碼保管，<b>不要分享給別人</b>。它只會儲存在你自己電腦的安裝資料夾中（<code>config.json</code>），不會上傳到任何地方（除了呼叫 Google Gemini 本身）。
+</div>
+
+<h2 id="setup">4. 初次設定</h2>
+<p>第一次開啟時會看到「歡迎使用 YT 字幕機」設定畫面：</p>
+<ol>
+  <li><b>Gemini API Key</b>：貼上上一步複製的金鑰。</li>
+  <li><b>YouTube 頻道網址</b>：例如 <code>https://www.youtube.com/@你的頻道名稱</code>（請填頻道首頁網址）。</li>
+  <li>按「<b>開始設定</b>」。程式會檢查你的 NVIDIA 顯示卡，並抓取頻道的影片清單（頻道影片很多時可能需要一到數分鐘，請耐心等候）。</li>
+  <li>看到「✓ 設定完成，已偵測到 NVIDIA 顯示卡」就會自動進入主畫面。</li>
+</ol>
+<p>如果顯示「偵測不到可用的 NVIDIA 顯示卡」，請參考<a href="#faq">常見問題</a>。想更換 API Key 或頻道，可手動開啟 <code>http://127.0.0.1:8420/setup.html</code> 重新設定。</p>
+
+<h2 id="queue">5. 挑選影片並開始處理</h2>
+<p>設定完成後會進入「<b>頻道影片清單</b>」頁面，列出頻道上的所有影片。</p>
+<ul>
+  <li><b>已經有字幕的影片</b>可以勾選左邊的方框（標記為「已有字幕」），處理時會略過。也可以用「把目前顯示的全部標記為已有字幕」一次勾選。</li>
+  <li>預設隱藏 5 分鐘以下的短片，且 5 分鐘以下的影片<b>不會被處理</b>。</li>
+  <li>調整完按「<b>儲存標記</b>」，再按「<b>建立處理佇列</b>」。佇列會依影片長度由短到長處理。</li>
+  <li>按「<b>▶ 開始處理</b>」。</li>
+</ul>
+<div class="ok box">
+  <b>第一次使用</b>會先下載語音辨識模型（約 1.6GB），上方會顯示「下載中」，視網路速度需要幾分鐘到數十分鐘，只需要下載這一次。
+</div>
+<p>上方有兩條進度列：</p>
+<table>
+  <tr><th>進度列</th><th>意義</th></tr>
+  <tr><td>📝 轉錄準備</td><td>下載音訊 → 語音辨識 → 產生字幕。使用你的顯示卡，沒有每日次數限制，可以一直跑。</td></tr>
+  <tr><td>🤖 Gemini 校正</td><td>請 Gemini 找出並修正同音錯字。受每日額度限制（見下一節）。</td></tr>
+</table>
+<p>年齡限制、私人、會員專屬等無法下載的影片會自動略過，不會卡住整個佇列。</p>
+<div class="warn box">
+  <b>處理期間請保持程式視窗開啟，並避免讓電腦睡眠、闔上筆電或關機</b>（睡眠後顯示卡有時會卡住）。如果中途被中斷，重新開啟程式再按一次「▶ 開始處理」，就會從中斷的地方繼續，已完成的影片不會重做。
+</div>
+
+<h2 id="quota">6. 處理速度與每日額度</h2>
+<ul>
+  <li>語音辨識速度取決於你的顯示卡，通常一小時的影片約需幾分鐘到十幾分鐘。</li>
+  <li>Gemini 免費額度有每日請求次數上限，本工具預設每天最多使用約 480 次，避免超過上限。一部影片依長度大約需要 20～55 次，所以<b>每天大約可以校正 10～15 部影片</b>。</li>
+  <li>額度用完後，「Gemini 校正」那一列會顯示「今日額度已達標」，隔天額度重置後會自動繼續（保持程式開著，或隔天再按「▶ 開始處理」）。</li>
+  <li>影片很多的頻道會需要分成數天到數週才能全部校正完，這是免費額度的限制，不是程式故障。轉錄本身不受影響，可以先全部轉完。</li>
+</ul>
+
+<h2 id="review">7. 校對字幕與匯出</h2>
+<p>在主畫面（點頻道清單頁左上的「← 回校對介面」）左側列出已處理好的影片，點選一部就可以邊聽音檔邊校對。</p>
+<table>
+  <tr><th>功能</th><th>說明</th></tr>
+  <tr><td>點字幕文字</td><td>直接修改文字。</td></tr>
+  <tr><td>只看 AI 修改過</td><td>只顯示被 Gemini 改過的句子，快速確認改得對不對。</td></tr>
+  <tr><td>只看低信心</td><td>只顯示語音辨識沒把握的句子，通常最容易有錯字。</td></tr>
+  <tr><td>只看 AI 被擋下的建議</td><td>Gemini 提出修改，但被「發音相近」檢查擋下的建議（避免 AI 亂改）。覺得合理可以按「採用」。</td></tr>
+  <tr><td>詞庫</td><td>把常見誤植加成「錯誤寫法 → 正確寫法」，例如人名、遊戲名。可選擇只套用到這部，或套用到全部已處理影片（含之後新處理的）。</td></tr>
+  <tr><td>常見修改</td><td>列出這部影片中重複出現的修改，可一次篩選查看。</td></tr>
+  <tr><td>儲存</td><td>儲存你的修改（產生 <code>影片ID_final.srt</code>）。</td></tr>
+  <tr><td>匯出 SRT</td><td>下載字幕檔。若你有儲存過就是你校對後的版本，否則是 AI 校正版。</td></tr>
+  <tr><td>完成校對並釋放音檔</td><td>校對完後按這顆，會刪除這部影片的音檔以節省硬碟空間（字幕檔會保留）。按之前請先確認已儲存。</td></tr>
+</table>
+<p>字幕檔位置：所有字幕都存在安裝資料夾（預設 <code>C:\Users\你的使用者名稱\AppData\Local\Programs\YT字幕機</code>），檔名以影片 ID 命名：</p>
+<ul>
+  <li><code>影片ID.srt</code>：語音辨識原始字幕（未經 AI 校正）</li>
+  <li><code>影片ID_corrected.srt</code>：Gemini 校正後</li>
+  <li><code>影片ID_final.srt</code>：你校對並儲存後</li>
+</ul>
+
+<h2 id="upload">8. 把字幕上傳到 YouTube</h2>
+<ol>
+  <li>登入 <a href="https://studio.youtube.com" target="_blank">YouTube Studio</a>，進入左側「<b>字幕</b>」。</li>
+  <li>選擇影片 → 「新增語言」（繁體中文）→ 在「字幕」欄點「新增」→「<b>上傳檔案</b>」→ 選「<b>搭配時間軸</b>」。</li>
+  <li>選擇剛匯出的 <code>.srt</code> 檔 → 儲存 → 發布。</li>
+</ol>
+
+<h2 id="faq">9. 常見問題</h2>
+
+<h3>Q：顯示「偵測不到可用的 NVIDIA 顯示卡」？</h3>
+<ul>
+  <li>確認電腦有 NVIDIA 獨立顯示卡（桌面右鍵 →「NVIDIA 控制面板」是否存在，或工作管理員 → 效能 → GPU）。</li>
+  <li>到 <a href="https://www.nvidia.com/download/index.aspx" target="_blank">NVIDIA 官網</a>下載並安裝最新版驅動程式，重新啟動電腦後再試。</li>
+  <li>筆電請確認有切換到使用獨立顯示卡（雙顯卡筆電）。</li>
+  <li>本工具<b>不支援</b>沒有 NVIDIA 顯示卡的電腦。</li>
+</ul>
+
+<h3>Q：進度很久都沒有動？</h3>
+<p>長影片（數小時的直播）轉錄本身就需要較長時間，只要顯示卡使用率有在動就是正常。若電腦曾經睡眠或闔上筆電導致卡住，請關閉黑色視窗，重新開啟程式，再按「▶ 開始處理」。</p>
+
+<h3>Q：Gemini 校正一直失敗或沒有動作？</h3>
+<ul>
+  <li>確認 API Key 正確（可到 <code>http://127.0.0.1:8420/setup.html</code> 重新輸入）。</li>
+  <li>確認你的 Google 帳號所在地區可以使用 Gemini API。</li>
+  <li>可能是今日額度已用完，隔天會自動重置。</li>
+</ul>
+
+<h3>Q：有些影片字幕是空的？</h3>
+<p>該影片沒有人聲（例如純遊戲音樂、無說話的影片），所以沒有可轉的文字，屬於正常。</p>
+
+<h3>Q：有些影片一直沒有被處理？</h3>
+<p>年齡限制、私人、已移除、頻道會員專屬的影片無法下載，會被自動略過。</p>
+
+<h3>Q：如何解除安裝？</h3>
+<p>Windows「設定 → 應用程式」中找到「YT字幕機」解除安裝。你的字幕檔位於安裝資料夾內，解除安裝前請先備份需要保留的 <code>.srt</code> 檔。</p>
+
+<h2 id="notes">10. 注意事項</h2>
+<ul>
+  <li>本工具會下載並轉錄你指定頻道的 YouTube 影片音訊。請確認你有權處理這些內容（建議僅用於你自己擁有或已獲授權的頻道），並自行遵守 YouTube 服務條款與 Google Gemini API 使用條款。</li>
+  <li>字幕文字會傳送到 Google Gemini 進行校正。使用免費版 API 時，Google 可能依其條款將資料用於改善產品，請避免處理含有機密或個資的內容。</li>
+  <li>AI 校正無法保證百分之百正確，發布前請務必自行校對。</li>
+  <li>語音辨識與校正針對<b>繁體中文</b>的直播／影片內容調校，其他語言效果不保證。</li>
+</ul>
+
+<hr>
+<p style="color:#777; font-size:13px;">YT 字幕機 v1.0.0（MIT 授權，第三方元件授權見安裝資料夾內的 THIRD_PARTY_NOTICES.md）</p>
+
+</body>
+</html>

@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<script src="/setup-gate.js"></script>
+<meta charset="UTF-8">
+<title>字幕校對</title>
+<style>
+  :root {
+    --bg: #1a1b1e; --panel: #232428; --border: #33353a; --text: #e8e9ea; --muted: #8a8d93;
+    --accent: #6c8dff; --edited: #ffb454; --lowconf: #ff6464; --playing: #2a3550;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: -apple-system, "Segoe UI", "Microsoft JhengHei", sans-serif; height: 100vh; overflow: hidden; }
+  #app { display: flex; height: 100vh; }
+  #sidebar { width: 280px; background: var(--panel); border-right: 1px solid var(--border); overflow-y: auto; flex-shrink: 0; }
+  #sidebar h1 { font-size: 15px; padding: 16px; margin: 0; border-bottom: 1px solid var(--border); }
+  .vgroup-header { padding: 10px 16px 6px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; background: #1e1f23; position: sticky; top: 0; }
+  .vitem { padding: 12px 16px; border-bottom: 1px solid var(--border); cursor: pointer; }
+  .vitem:hover { background: #2a2b30; }
+  .vitem.active { background: var(--accent); }
+  .vitem .t { font-size: 13px; margin-bottom: 4px; }
+  .vitem .meta { font-size: 11px; color: var(--muted); }
+  .vitem.active .meta { color: #dfe4ff; }
+  #main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  #topbar { padding: 12px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; }
+  #topbar h2 { font-size: 15px; margin: 0; flex: 1; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  button { background: var(--accent); color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+  button:hover { opacity: 0.85; }
+  button.secondary { background: #3a3b40; }
+  button.danger { background: transparent; border: 1px solid #5a3a3a; color: #c98a8a; padding: 4px 10px; font-size: 11px; }
+  button.danger:hover { background: rgba(255,100,100,0.1); }
+  button:disabled { opacity: 0.4; cursor: default; }
+  #playerbar { padding: 10px 20px; border-bottom: 1px solid var(--border); }
+  #playerbar audio { width: 100%; }
+  #finishRow { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 10px; opacity: 0.55; font-size: 11px; color: var(--muted); }
+  #finishRow:hover { opacity: 1; }
+  #filterbar { padding: 8px 20px; border-bottom: 1px solid var(--border); display: flex; gap: 16px; font-size: 12px; color: var(--muted); align-items: center; }
+  #filterbar label { display: flex; align-items: center; gap: 5px; cursor: pointer; }
+  #cues { flex: 1; overflow-y: auto; padding: 8px 0; }
+  .cue { display: flex; gap: 12px; padding: 8px 20px; border-left: 3px solid transparent; }
+  .cue:hover { background: #212226; }
+  .cue.playing { background: var(--playing); border-left-color: var(--accent); }
+  .cue .time { flex-shrink: 0; width: 64px; font-size: 11px; color: var(--muted); padding-top: 4px; cursor: pointer; font-variant-numeric: tabular-nums; }
+  .cue .time:hover { color: var(--accent); }
+  .cue .body { flex: 1; min-width: 0; }
+  .cue .text { font-size: 14px; line-height: 1.5; outline: none; padding: 4px 6px; border-radius: 4px; border: 1px solid transparent; }
+  .cue .text:focus { border-color: var(--accent); background: #1e1f23; }
+  .cue.edited .text { border-left: 2px solid var(--edited); }
+  .cue.lowconf .text { border-left: 2px solid var(--lowconf); }
+  .cue.edited.lowconf .text { border-left: 2px solid var(--edited); border-right: 2px solid var(--lowconf); }
+  .badges { display: flex; gap: 6px; margin-top: 3px; }
+  .badge { font-size: 10px; padding: 1px 6px; border-radius: 3px; cursor: default; }
+  .badge.edited { background: rgba(255,180,84,0.15); color: var(--edited); }
+  .badge.lowconf { background: rgba(255,100,100,0.15); color: var(--lowconf); }
+  .badge.glossary { background: rgba(108,141,255,0.18); color: var(--accent); }
+  .orig { font-size: 12px; color: var(--muted); margin-top: 2px; text-decoration: line-through; }
+  .hint { display: flex; align-items: center; gap: 8px; margin-top: 4px; padding: 4px 8px; background: rgba(108,141,255,0.08); border: 1px dashed rgba(108,141,255,0.35); border-radius: 5px; font-size: 12px; }
+  .hint-badge { flex-shrink: 0; background: rgba(108,141,255,0.15); color: var(--accent); }
+  .hint-text { color: var(--text); opacity: 0.85; flex: 1; }
+  .hint-accept { flex-shrink: 0; padding: 2px 10px; font-size: 11px; }
+  #empty { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--muted); }
+  #status { font-size: 12px; color: var(--muted); margin-right: 4px; }
+  .hidden { display: none !important; }
+
+  /* overlay panels (groups / glossary) */
+  .overlay { position: fixed; top: 0; right: 0; bottom: 0; width: 420px; background: var(--panel); border-left: 1px solid var(--border); z-index: 20; display: flex; flex-direction: column; box-shadow: -8px 0 24px rgba(0,0,0,0.3); }
+  .overlay-head { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; }
+  .overlay-head h3 { margin: 0; font-size: 14px; flex: 1; }
+  .overlay-head .close { cursor: pointer; color: var(--muted); font-size: 18px; padding: 0 4px; }
+  .overlay-body { flex: 1; overflow-y: auto; padding: 12px 18px; }
+  .grp-row { padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .grp-main { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .grp-main .arrow { color: var(--muted); }
+  .grp-old { text-decoration: line-through; color: var(--muted); }
+  .grp-new { color: var(--edited); }
+  .grp-count { margin-left: auto; font-size: 11px; color: var(--muted); background: #2c2d32; padding: 1px 7px; border-radius: 10px; }
+  .grp-actions { display: flex; gap: 8px; margin-top: 6px; }
+  .grp-actions button { padding: 3px 10px; font-size: 11px; }
+  .gloss-form { display: flex; flex-direction: column; gap: 8px; padding-bottom: 14px; margin-bottom: 14px; border-bottom: 1px solid var(--border); }
+  .gloss-form input[type=text] { background: #1a1b1e; border: 1px solid var(--border); color: var(--text); padding: 7px 10px; border-radius: 5px; font-size: 13px; }
+  .gloss-form .row2 { display: flex; gap: 8px; align-items: center; }
+  .gloss-form .row2 input[type=text] { flex: 1; }
+  .gloss-form label { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+  .gloss-item { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 13px; }
+  .cand-item { display: flex; align-items: center; gap: 8px; padding: 8px 0; font-size: 13px; border-bottom: 1px solid var(--border); }
+  .cand-item .grp-count { margin-left: auto; }
+  .gloss-item .del { margin-left: auto; color: var(--muted); cursor: pointer; font-size: 11px; }
+  .gloss-item .del:hover { color: var(--lowconf); }
+  #groupFilterBar { display: none; background: #2a2b30; padding: 6px 20px; font-size: 12px; align-items: center; gap: 10px; }
+  #groupFilterBar.active { display: flex; }
+  #groupFilterBar .clear { color: var(--accent); cursor: pointer; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="sidebar">
+    <h1 id="sidebarTitle">已校正影片 <a href="/channel.html" style="float:right;font-size:11px;color:var(--accent);text-decoration:none;">頻道清單 →</a></h1>
+    <div id="vlist"></div>
+  </div>
+  <div id="main">
+    <div id="empty">選擇左側的影片開始校對</div>
+    <div id="editor" class="hidden" style="display:flex; flex-direction:column; height:100%;">
+      <div id="topbar">
+        <h2 id="vtitle"></h2>
+        <span id="status"></span>
+        <button class="secondary" id="btnGroups">常見修改</button>
+        <button class="secondary" id="btnGlossary">詞庫</button>
+        <button class="secondary" id="btnExport">匯出 SRT</button>
+        <button id="btnSave">儲存</button>
+      </div>
+      <div id="playerbar">
+        <audio id="audio" controls></audio>
+        <div id="noAudioMsg" class="hidden" style="color:var(--muted);font-size:12px;padding:6px 0;">此影片音檔已釋放（校對已完成），僅能檢視/編輯文字</div>
+        <div id="finishRow"><span>都確認過了嗎？</span><button class="danger" id="btnFinish" title="校對完後點這個，刪除這部的音檔以釋放硬碟空間">完成校對並釋放音檔</button></div>
+      </div>
+      <div id="filterbar">
+        <label><input type="checkbox" id="fltEdited"> 只看 AI 修改過 (<span id="cntEdited">0</span>)</label>
+        <label><input type="checkbox" id="fltLowconf"> 只看低信心 (<span id="cntLowconf">0</span>)</label>
+        <label><input type="checkbox" id="fltHint"> 只看 AI 被擋下的建議 (<span id="cntHint">0</span>)</label>
+        <span style="margin-left:auto">點字幕播放該句　↑↓ 換句　Space 播放暫停</span>
+      </div>
+      <div id="groupFilterBar"><span>只顯示：<b id="groupFilterLabel"></b></span><span class="clear" id="groupFilterClear">清除篩選 ✕</span></div>
+      <div id="cues"></div>
+    </div>
+  </div>
+</div>
+
+<div id="groupsPanel" class="overlay hidden">
+  <div class="overlay-head"><h3>常見修改（依詞分組）</h3><span class="close" id="groupsClose">✕</span></div>
+  <div class="overlay-body" id="groupsBody"></div>
+</div>
+
+<div id="glossaryPanel" class="overlay hidden">
+  <div class="overlay-head"><h3>詞庫</h3><span class="close" id="glossaryClose">✕</span></div>
+  <div class="overlay-body">
+    <div class="gloss-form">
+      <div class="row2">
+        <input type="text" id="glossWrong" placeholder="錯字（例如：九碗）">
+        <span>→</span>
+        <input type="text" id="glossRight" placeholder="正確（例如：九腕）">
+      </div>
+      <label><input type="radio" name="applyTo" value="current" checked> 只套用到這部</label>
+      <label><input type="radio" name="applyTo" value="all"> 套用到全部已處理影片（含未來新處理的）</label>
+      <button id="glossAdd">新增並套用</button>
+      <div id="glossApplyResult" style="font-size:12px;color:var(--muted);"></div>
+    </div>
+    <div id="glossList"></div>
+  </div>
+</div>
+
+<div id="candidatesPanel" class="overlay hidden">
+  <div class="overlay-head"><h3>發現可能通用的修改</h3><span class="close" id="candidatesClose">✕</span></div>
+  <div class="overlay-body">
+    <p style="font-size:12px;color:var(--muted);margin-top:0;">這些是你剛才手動修改裡，看起來可能會在其他影片重複出現的詞。勾選要加入詞庫的項目（會自動套用到全部已處理影片，並用於未來的新影片）。</p>
+    <div id="candidatesList"></div>
+  </div>
+  <div style="padding:14px 18px;border-top:1px solid var(--border);display:flex;gap:10px;">
+    <button id="candidatesConfirm">加入勾選項目並釋放音檔</button>
+    <button class="secondary" id="candidatesSkip">略過，直接釋放音檔</button>
+  </div>
+</div>
+
+<script>
+let currentVideo = null;
+let cues = [];
+let selectedIdx = -1;
+let dirty = false;
+
+const audio = document.getElementById('audio');
+const cuesEl = document.getElementById('cues');
+const vlist = document.getElementById('vlist');
+const statusEl = document.getElementById('status');
+
+function fmtTime(s) {
+  s = Math.floor(s);
+  const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), sec = s % 60;
+  return h > 0 ? `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}` : `${m}:${String(sec).padStart(2,'0')}`;
+}
+
+function makeVideoRow(v) {
+  const div = document.createElement('div');
+  div.className = 'vitem';
+  div.dataset.id = v.id;
+  const doneBadge = v.user_finished ? ' <span style="color:var(--done, #4caf7d);">✓ 已完成</span>' : '';
+  div.innerHTML = `<div class="t">${v.title}</div><div class="meta">${fmtTime(v.duration)} · ${v.cue_count} 句 · ${v.edit_count} 處修改${doneBadge}</div>`;
+  div.onclick = () => loadVideo(v.id);
+  return div;
+}
+
+async function loadVideoList() {
+  const videos = await fetch('/api/videos').then(r => r.json());
+  document.getElementById('sidebarTitle').firstChild.textContent = `已校正影片（${videos.length}）`;
+  vlist.innerHTML = '';
+
+  const pending = videos.filter(v => !v.user_finished);   // not yet explicitly marked finished by the user
+  const finished = videos.filter(v => v.user_finished);   // user clicked 完成校對並釋放音檔
+
+  if (pending.length) {
+    const h = document.createElement('div');
+    h.className = 'vgroup-header';
+    h.textContent = `待確認（${pending.length}）`;
+    vlist.appendChild(h);
+    for (const v of pending) vlist.appendChild(makeVideoRow(v));
+  }
+  if (finished.length) {
+    const h = document.createElement('div');
+    h.className = 'vgroup-header';
+    h.textContent = `已完成並釋放音檔（${finished.length}）`;
+    vlist.appendChild(h);
+    for (const v of finished) vlist.appendChild(makeVideoRow(v));
+  }
+}
+
+async function loadVideo(id) {
+  if (dirty && !confirm('目前的修改尚未儲存，確定要切換嗎？')) return;
+  currentVideo = id;
+  dirty = false;
+  document.querySelectorAll('.vitem').forEach(el => el.classList.toggle('active', el.dataset.id === id));
+  document.getElementById('empty').classList.add('hidden');
+  document.getElementById('editor').classList.remove('hidden');
+  document.getElementById('editor').style.display = 'flex';
+
+  const data = await fetch(`/api/videos/${id}`).then(r => r.json());
+  cues = data.cues;
+  document.getElementById('vtitle').textContent = data.title + (data.is_final ? '（已儲存校對）' : '');
+  if (data.has_audio) {
+    audio.src = `/api/videos/${id}/audio`;
+    audio.classList.remove('hidden');
+    document.getElementById('noAudioMsg').classList.add('hidden');
+  } else {
+    audio.removeAttribute('src');
+    audio.classList.add('hidden');
+    document.getElementById('noAudioMsg').classList.remove('hidden');
+  }
+  document.getElementById('btnFinish').disabled = !data.has_audio;
+  selectedIdx = -1;
+  renderCues();
+  updateStatus();
+}
+
+function updateStatus() {
+  const editedCount = cues.filter(c => c.ai_edited).length;
+  const lowconfCount = cues.filter(c => c.low_confidence).length;
+  const hintCount = cues.filter(c => c.rejected_suggestion).length;
+  document.getElementById('cntEdited').textContent = editedCount;
+  document.getElementById('cntLowconf').textContent = lowconfCount;
+  document.getElementById('cntHint').textContent = hintCount;
+  statusEl.textContent = dirty ? '● 尚未儲存' : '';
+}
+
+let groupFilterIdxs = null;   // Set of cue idx, or null = no group filter active
+
+function passesFilter(c) {
+  const onlyEdited = document.getElementById('fltEdited').checked;
+  const onlyLowconf = document.getElementById('fltLowconf').checked;
+  const onlyHint = document.getElementById('fltHint').checked;
+  if (onlyEdited && !c.ai_edited) return false;
+  if (onlyLowconf && !c.low_confidence) return false;
+  if (onlyHint && !c.rejected_suggestion) return false;
+  if (groupFilterIdxs && !groupFilterIdxs.has(c.idx)) return false;
+  return true;
+}
+
+function setGroupFilter(idxs, label) {
+  groupFilterIdxs = idxs ? new Set(idxs) : null;
+  const bar = document.getElementById('groupFilterBar');
+  bar.classList.toggle('active', !!groupFilterIdxs);
+  document.getElementById('groupFilterLabel').textContent = label || '';
+  renderCues();
+}
+document.getElementById('groupFilterClear').onclick = () => setGroupFilter(null);
+
+function renderCues() {
+  cuesEl.innerHTML = '';
+  for (const c of cues) {
+    if (!passesFilter(c)) continue;
+    const row = document.createElement('div');
+    row.className = 'cue' + (c.ai_edited ? ' edited' : '') + (c.low_confidence ? ' lowconf' : '');
+    row.dataset.idx = c.idx;
+
+    const time = document.createElement('div');
+    time.className = 'time';
+    time.textContent = fmtTime(c.start);
+    time.onclick = () => seekTo(c.idx);
+
+    const body = document.createElement('div');
+    body.className = 'body';
+
+    const badges = document.createElement('div');
+    badges.className = 'badges';
+    if (c.ai_edited) {
+      const b = document.createElement('span');
+      b.className = 'badge edited'; b.textContent = 'AI 修改';
+      badges.appendChild(b);
+    }
+    if (c.low_confidence) {
+      const b = document.createElement('span');
+      b.className = 'badge lowconf'; b.textContent = '低信心';
+      badges.appendChild(b);
+    }
+    if (c.glossary_edited) {
+      const b = document.createElement('span');
+      b.className = 'badge glossary'; b.textContent = '詞庫套用';
+      badges.appendChild(b);
+    }
+    if (badges.children.length) body.appendChild(badges);
+
+    if (c.ai_edited && c.original_text) {
+      const orig = document.createElement('div');
+      orig.className = 'orig';
+      orig.textContent = '原文：' + c.original_text;
+      body.appendChild(orig);
+    }
+
+    const text = document.createElement('div');
+    text.className = 'text';
+    text.contentEditable = 'true';
+    text.textContent = c.text;
+    text.oninput = () => { c.text = text.textContent; dirty = true; updateStatus(); };
+    text.onfocus = () => selectRow(c.idx, false);
+
+    if (c.rejected_suggestion) {
+      const hint = document.createElement('div');
+      hint.className = 'hint';
+      hint.innerHTML = `<span class="badge hint-badge">AI 想改但被擋下</span><span class="hint-text">${c.rejected_suggestion}</span>`;
+      const acceptBtn = document.createElement('button');
+      acceptBtn.className = 'hint-accept';
+      acceptBtn.textContent = '採用';
+      acceptBtn.onclick = (e) => {
+        e.stopPropagation();
+        c.text = c.rejected_suggestion;
+        text.textContent = c.text;
+        c.rejected_suggestion = null;
+        dirty = true; updateStatus();
+        renderCues();
+      };
+      hint.appendChild(acceptBtn);
+      body.appendChild(hint);
+    }
+    body.appendChild(text);
+
+    row.appendChild(time);
+    row.appendChild(body);
+    row.onclick = () => seekTo(c.idx);
+    cuesEl.appendChild(row);
+  }
+}
+
+function selectRow(idx, scrollTo) {
+  selectedIdx = idx;
+  document.querySelectorAll('.cue').forEach(el => el.classList.toggle('playing', Number(el.dataset.idx) === idx));
+  if (scrollTo) {
+    const el = cuesEl.querySelector(`.cue[data-idx="${idx}"]`);
+    if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
+}
+
+let playUntil = null;   // when set, playback auto-pauses once currentTime reaches this point
+
+function seekTo(idx) {
+  const c = cues[idx];
+  if (!c) return;
+  audio.currentTime = c.start;
+  playUntil = c.end;
+  audio.play();
+  selectRow(idx, false);
+}
+
+audio.addEventListener('timeupdate', () => {
+  const t = audio.currentTime;
+  if (playUntil !== null && t >= playUntil) {
+    audio.pause();
+    playUntil = null;
+    return;
+  }
+  const c = cues.find(c => t >= c.start && t < c.end);
+  if (c && c.idx !== selectedIdx) selectRow(c.idx, true);
+});
+// dragging the native scrubber manually cancels any pending auto-stop from a cue preview
+audio.addEventListener('play', () => {
+  if (!audio.seeking && playUntil !== null && audio.currentTime >= playUntil) playUntil = null;
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.target.isContentEditable) {
+    if (e.key === 'Escape') e.target.blur();
+    return;
+  }
+  if (e.key === ' ') { e.preventDefault(); audio.paused ? audio.play() : audio.pause(); }
+  else if (e.key === 'ArrowDown') { e.preventDefault(); const visible = cues.filter(passesFilter); const i = visible.findIndex(c => c.idx === selectedIdx); const next = visible[Math.min(i + 1, visible.length - 1)] || visible[0]; if (next) seekTo(next.idx); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); const visible = cues.filter(passesFilter); const i = visible.findIndex(c => c.idx === selectedIdx); const prev = visible[Math.max(i - 1, 0)]; if (prev) seekTo(prev.idx); }
+});
+
+document.getElementById('fltEdited').onchange = renderCues;
+document.getElementById('fltLowconf').onchange = renderCues;
+document.getElementById('fltHint').onchange = renderCues;
+
+async function saveCurrent() {
+  if (!currentVideo) return;
+  await fetch(`/api/videos/${currentVideo}/save`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cues: cues.map(c => ({ start: c.start, end: c.end, text: c.text })) })
+  });
+  dirty = false;
+  updateStatus();
+}
+
+document.getElementById('btnSave').onclick = async () => {
+  if (!currentVideo) return;
+  statusEl.textContent = '儲存中...';
+  await saveCurrent();
+  statusEl.textContent = '✓ 已儲存';
+  setTimeout(() => { if (!dirty) statusEl.textContent = ''; }, 2000);
+};
+
+document.getElementById('btnExport').onclick = () => {
+  if (!currentVideo) return;
+  window.open(`/api/videos/${currentVideo}/export`, '_blank');
+};
+
+async function releaseAudio() {
+  if (!confirm('確定要刪除這部影片的音檔嗎？刪除後這部就無法再聽音檔核對，但字幕文字都會保留。')) return;
+  const res = await fetch(`/api/videos/${currentVideo}/finish`, { method: 'POST' }).then(r => r.json());
+  audio.removeAttribute('src');
+  audio.classList.add('hidden');
+  document.getElementById('noAudioMsg').classList.remove('hidden');
+  document.getElementById('btnFinish').disabled = true;
+  statusEl.textContent = `✓ 已釋放 ${res.freed_mb} MB`;
+  loadVideoList();
+}
+
+document.getElementById('btnFinish').onclick = async () => {
+  if (!currentVideo) return;
+  if (dirty && !confirm('還有未儲存的修改，要先儲存再釋放音檔嗎？（取消的話會直接釋放，未儲存的修改會遺失）')) return;
+  if (dirty) await saveCurrent();
+
+  const candidates = await fetch(`/api/videos/${currentVideo}/glossary-candidates`).then(r => r.json());
+  if (candidates.length) {
+    renderCandidates(candidates);
+    openPanel('candidatesPanel');
+  } else {
+    await releaseAudio();
+  }
+};
+
+function renderCandidates(candidates) {
+  const list = document.getElementById('candidatesList');
+  list.innerHTML = '';
+  for (const c of candidates) {
+    const row = document.createElement('div');
+    row.className = 'cand-item';
+    row.innerHTML = `<input type="checkbox" checked><span class="grp-old">${c.wrong}</span><span class="arrow">→</span><span class="grp-new">${c.right}</span><span class="grp-count">${c.count} 處</span>`;
+    row.dataset.wrong = c.wrong;
+    row.dataset.right = c.right;
+    list.appendChild(row);
+  }
+}
+
+document.getElementById('candidatesClose').onclick = () => closePanel('candidatesPanel');
+document.getElementById('candidatesSkip').onclick = async () => {
+  closePanel('candidatesPanel');
+  await releaseAudio();
+};
+document.getElementById('candidatesConfirm').onclick = async () => {
+  const rows = document.querySelectorAll('#candidatesList .cand-item');
+  for (const row of rows) {
+    if (!row.querySelector('input[type=checkbox]').checked) continue;
+    await fetch('/api/glossary', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ wrong: row.dataset.wrong, right: row.dataset.right, apply_to: 'all' })
+    });
+  }
+  closePanel('candidatesPanel');
+  await releaseAudio();
+};
+
+// ---- diff (character-level, LCS-based) ----
+function diffPairs(oldStr, newStr) {
+  const n = oldStr.length, m = newStr.length;
+  const dp = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--)
+    dp[i][j] = oldStr[i] === newStr[j] ? dp[i + 1][j + 1] : 1 + Math.min(dp[i + 1][j + 1], dp[i + 1][j], dp[i][j + 1]);
+  let i = 0, j = 0, curOld = '', curNew = '';
+  const pairs = [];
+  const flush = () => { if (curOld || curNew) { pairs.push([curOld, curNew]); curOld = ''; curNew = ''; } };
+  while (i < n && j < m) {
+    if (oldStr[i] === newStr[j]) { flush(); i++; j++; }
+    else if (dp[i][j] === 1 + dp[i + 1][j + 1]) { curOld += oldStr[i]; curNew += newStr[j]; i++; j++; }
+    else if (dp[i][j] === 1 + dp[i + 1][j]) { curOld += oldStr[i]; i++; }
+    else { curNew += newStr[j]; j++; }
+  }
+  while (i < n) { curOld += oldStr[i]; i++; }
+  while (j < m) { curNew += newStr[j]; j++; }
+  flush();
+  return pairs;
+}
+
+function computeEditGroups() {
+  const groups = new Map();
+  for (const c of cues) {
+    if (!c.ai_edited || !c.original_text) continue;
+    for (const [o, n] of diffPairs(c.original_text, c.text)) {
+      if (!o && !n) continue;
+      const key = o + '→' + n;
+      if (!groups.has(key)) groups.set(key, { old: o, new: n, idxs: [] });
+      groups.get(key).idxs.push(c.idx);
+    }
+  }
+  return [...groups.values()].sort((a, b) => b.idxs.length - a.idxs.length);
+}
+
+function renderGroups() {
+  const body = document.getElementById('groupsBody');
+  body.innerHTML = '';
+  const groups = computeEditGroups();
+  if (!groups.length) { body.innerHTML = '<div style="color:var(--muted);font-size:13px;">這部沒有可分組的 AI 修改</div>'; return; }
+  for (const g of groups) {
+    const row = document.createElement('div');
+    row.className = 'grp-row';
+    row.innerHTML = `<div class="grp-main"><span class="grp-old">${g.old || '（無）'}</span><span class="arrow">→</span><span class="grp-new">${g.new || '（刪除）'}</span><span class="grp-count">${g.idxs.length} 處</span></div>`;
+    const actions = document.createElement('div');
+    actions.className = 'grp-actions';
+    const btnFilter = document.createElement('button');
+    btnFilter.className = 'secondary'; btnFilter.textContent = '在字幕中檢視';
+    btnFilter.onclick = () => { setGroupFilter(g.idxs, `${g.old} → ${g.new}`); closePanel('groupsPanel'); };
+    const btnGloss = document.createElement('button');
+    btnGloss.className = 'secondary'; btnGloss.textContent = '存成詞庫規則';
+    btnGloss.onclick = () => { openPanel('glossaryPanel'); closePanel('groupsPanel'); document.getElementById('glossWrong').value = g.old; document.getElementById('glossRight').value = g.new; };
+    actions.appendChild(btnFilter); actions.appendChild(btnGloss);
+    row.appendChild(actions);
+    body.appendChild(row);
+  }
+}
+
+function openPanel(id) { document.getElementById(id).classList.remove('hidden'); }
+function closePanel(id) { document.getElementById(id).classList.add('hidden'); }
+
+document.getElementById('btnGroups').onclick = () => { renderGroups(); openPanel('groupsPanel'); };
+document.getElementById('groupsClose').onclick = () => closePanel('groupsPanel');
+
+// ---- glossary ----
+async function renderGlossary() {
+  const entries = await fetch('/api/glossary').then(r => r.json());
+  const list = document.getElementById('glossList');
+  list.innerHTML = '';
+  if (!entries.length) { list.innerHTML = '<div style="color:var(--muted);font-size:13px;">詞庫是空的</div>'; return; }
+  for (const e of entries) {
+    const row = document.createElement('div');
+    row.className = 'gloss-item';
+    row.innerHTML = `<span class="grp-old">${e.wrong}</span><span class="arrow">→</span><span class="grp-new">${e.right}</span><span class="del">刪除</span>`;
+    row.querySelector('.del').onclick = async () => {
+      await fetch('/api/glossary', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(e) });
+      renderGlossary();
+    };
+    list.appendChild(row);
+  }
+}
+
+document.getElementById('btnGlossary').onclick = () => { renderGlossary(); openPanel('glossaryPanel'); };
+document.getElementById('glossaryClose').onclick = () => closePanel('glossaryPanel');
+
+document.getElementById('glossAdd').onclick = async () => {
+  const wrong = document.getElementById('glossWrong').value.trim();
+  const right = document.getElementById('glossRight').value.trim();
+  if (!wrong || !right) return;
+  const applyTo = document.querySelector('input[name=applyTo]:checked').value;
+  const resultEl = document.getElementById('glossApplyResult');
+  if (dirty) {
+    resultEl.textContent = '先儲存目前的修改...';
+    await saveCurrent();
+  }
+  resultEl.textContent = '套用中...';
+  const res = await fetch('/api/glossary', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ wrong, right, apply_to: applyTo, vid: currentVideo })
+  }).then(r => r.json());
+  const total = Object.values(res.applied).reduce((a, b) => a + b, 0);
+  resultEl.textContent = `已加入詞庫，套用了 ${total} 處`;
+  document.getElementById('glossWrong').value = '';
+  document.getElementById('glossRight').value = '';
+  renderGlossary();
+  if (currentVideo && res.applied[currentVideo]) {
+    const data = await fetch(`/api/videos/${currentVideo}`).then(r => r.json());
+    cues = data.cues;
+    renderCues();
+    updateStatus();
+  }
+};
+
+// safety net: autosave periodically so no single action (e.g. applying a glossary rule) can wipe out unsaved edits
+setInterval(() => { if (dirty) saveCurrent(); }, 15000);
+
+loadVideoList();
+</script>
+</body>
+</html>

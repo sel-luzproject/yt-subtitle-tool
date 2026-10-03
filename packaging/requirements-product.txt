@@ -1,0 +1,13 @@
+fastapi==0.141.1
+uvicorn==0.53.0
+pydantic
+yt-dlp
+faster-whisper==1.2.1
+av==18.1.0
+ctranslate2==4.8.2
+nvidia-cublas-cu12==12.9.2.10
+nvidia-cuda-nvrtc-cu12==12.9.86
+nvidia-cudnn-cu12==9.26.0.51
+opencc-python-reimplemented==0.1.7
+pypinyin==0.55.0
+tzdata

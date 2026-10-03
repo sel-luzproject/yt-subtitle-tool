@@ -1,0 +1,24 @@
+# user data / secrets - never commit
+config.json
+glossary.txt
+videos/
+*.srt
+*.json
+*.tsv
+*.log
+queue.json
+channel_all.json
+channel_status.json
+finished_videos.json
+unavailable_videos.json
+gemini_daily_usage.json
+batch_progress.json
+watchdog_fail_streak.json
+last_channel_refresh.json
+
+# build output
+packaging/build/
+packaging/output/
+__pycache__/
+*.pyc
+.venv/

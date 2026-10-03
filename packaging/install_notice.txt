@@ -1,0 +1,11 @@
+【系統需求】
+- Windows 10 / 11（64 位元）
+- NVIDIA 獨立顯示卡（建議 RTX 3050 以上、顯示記憶體 4GB 以上），並已安裝最新版 NVIDIA 驅動程式
+- 約 8GB 以上可用硬碟空間（含語音辨識模型，首次使用會自動下載約 1.6GB）
+- 網路連線
+- 自己的 Gemini API Key（免費申請：https://aistudio.google.com/apikey）
+
+【注意事項】
+- 本工具不支援沒有 NVIDIA 顯示卡的電腦。
+- 本工具會下載並轉錄你指定的 YouTube 影片音訊，請確認你有權處理這些內容，並自行遵守 YouTube 服務條款與 Google Gemini API 使用條款。
+- 免費 Gemini API 每日有請求上限，字幕校正會依額度分天處理。

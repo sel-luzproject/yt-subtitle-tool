@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<script src="/setup-gate.js"></script>
+<meta charset="UTF-8">
+<title>頻道影片清單</title>
+<style>
+  :root { --bg:#1a1b1e; --panel:#232428; --border:#33353a; --text:#e8e9ea; --muted:#8a8d93; --accent:#6c8dff; --edited:#ffb454; --lowconf:#ff6464; --done:#4caf7d; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-system,"Segoe UI","Microsoft JhengHei",sans-serif; }
+  #topbar { padding:14px 24px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:14px; position:sticky; top:0; background:var(--bg); z-index:5; }
+  #topbar h1 { font-size:16px; margin:0; flex:1; }
+  #topbar a { color:var(--accent); text-decoration:none; font-size:13px; }
+  .stats { display:flex; gap:16px; padding:12px 24px; font-size:12px; color:var(--muted); border-bottom:1px solid var(--border); flex-wrap:wrap; }
+  .stats b { color:var(--text); }
+  #controls { padding:10px 24px; display:flex; gap:10px; align-items:center; border-bottom:1px solid var(--border); flex-wrap:wrap; }
+  input[type=text] { background:#1a1b1e; border:1px solid var(--border); color:var(--text); padding:7px 10px; border-radius:5px; font-size:13px; min-width:240px; }
+  button { background:var(--accent); color:white; border:none; padding:7px 14px; border-radius:6px; cursor:pointer; font-size:12px; }
+  button.secondary { background:#3a3b40; }
+  button:hover { opacity:.85; }
+  label.chk { font-size:12px; color:var(--muted); display:flex; align-items:center; gap:5px; cursor:pointer; }
+  table { width:100%; border-collapse:collapse; }
+  th { text-align:left; font-size:11px; color:var(--muted); padding:8px 24px; position:sticky; top:96px; background:var(--bg); border-bottom:1px solid var(--border); }
+  td { padding:8px 24px; font-size:13px; border-bottom:1px solid #26272b; }
+  tr:hover td { background:#212226; }
+  .dur { color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .badge { font-size:10px; padding:1px 7px; border-radius:3px; white-space:nowrap; }
+  .badge.done { background:rgba(76,175,125,.15); color:var(--done); }
+  .badge.todo { background:rgba(255,180,84,.15); color:var(--edited); }
+  .badge.skip { background:#2c2d32; color:var(--muted); }
+  #footer { position:sticky; bottom:0; background:var(--panel); border-top:1px solid var(--border); padding:12px 24px; display:flex; align-items:center; gap:12px; }
+  #footer span { font-size:12px; color:var(--muted); }
+</style>
+</head>
+<body>
+<div id="topbar">
+  <h1>頻道影片清單</h1>
+  <a href="/">← 回校對介面</a>
+</div>
+<div class="stats" id="stats"></div>
+<div class="stats" id="progressBarPrep" style="background:#232428;"></div>
+<div class="stats" id="progressBarCorrect" style="background:#232428;"></div>
+<div id="controls">
+  <input type="text" id="search" placeholder="搜尋標題...">
+  <label class="chk"><input type="checkbox" id="hideShorts" checked> 隱藏 5 分鐘以下的短片</label>
+  <label class="chk"><input type="checkbox" id="hideDone" > 隱藏已處理的</label>
+  <button class="secondary" id="checkAllVisible">把目前顯示的全部標記為「已有字幕」</button>
+  <button class="secondary" id="uncheckAllVisible">把目前顯示的全部取消標記</button>
+</div>
+<table>
+  <thead><tr>
+    <th style="width:40px"></th>
+    <th>標題</th>
+    <th style="width:80px">長度</th>
+    <th style="width:90px">狀態</th>
+  </tr></thead>
+  <tbody id="rows"></tbody>
+</table>
+<div id="footer">
+  <button id="btnSaveStatus">儲存標記</button>
+  <button class="secondary" id="btnBuildQueue">建立處理佇列</button>
+  <button id="btnStartBatch">▶ 開始處理</button>
+  <span id="footerMsg"></span>
+</div>
+<script>
+let all = [];
+let pendingSkip = {};   // id -> bool, only changed ones
+
+function fmtDur(s) {
+  if (!s) return '--';
+  s = Math.floor(s);
+  const h = Math.floor(s/3600), m = Math.floor(s%3600/60), sec = s%60;
+  return h>0 ? `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}` : `${m}:${String(sec).padStart(2,'0')}`;
+}
+
+async function load() {
+  all = await fetch('/api/channel').then(r=>r.json());
+  render();
+}
+
+function currentSkip(v) {
+  return v.id in pendingSkip ? pendingSkip[v.id] : v.skip;
+}
+
+function visibleList() {
+  const q = document.getElementById('search').value.trim().toLowerCase();
+  const hideShorts = document.getElementById('hideShorts').checked;
+  const hideDone = document.getElementById('hideDone').checked;
+  return all.filter(v => {
+    if (q && !v.title.toLowerCase().includes(q)) return false;
+    if (hideShorts && v.duration && v.duration < 300) return false;
+    if (hideDone && v.done) return false;
+    return true;
+  });
+}
+
+function render() {
+  const list = visibleList();
+  const rows = document.getElementById('rows');
+  rows.innerHTML = '';
+  for (const v of list) {
+    const tr = document.createElement('tr');
+    const skip = currentSkip(v);
+    const statusBadge = v.done ? '<span class="badge done">已處理</span>' : (skip ? '<span class="badge skip">已有字幕</span>' : '<span class="badge todo">待處理</span>');
+    tr.innerHTML = `<td><input type="checkbox" ${skip?'checked':''} ${v.done?'disabled':''}></td>
+      <td>${v.title}</td><td class="dur">${fmtDur(v.duration)}</td><td>${statusBadge}</td>`;
+    tr.querySelector('input').onchange = (e) => { pendingSkip[v.id] = e.target.checked; render(); };
+    rows.appendChild(tr);
+  }
+  const total = all.length;
+  const done = all.filter(v => v.done).length;
+  const skipped = all.filter(v => currentSkip(v) && !v.done).length;
+  const todo = total - done - skipped;
+  document.getElementById('stats').innerHTML =
+    `頻道共 <b>${total}</b> 部　已處理 <b>${done}</b>　已標記為有字幕（略過）<b>${skipped}</b>　待處理 <b>${todo}</b>　目前顯示 <b>${list.length}</b> 部`;
+}
+
+document.getElementById('search').oninput = render;
+document.getElementById('hideShorts').onchange = render;
+document.getElementById('hideDone').onchange = render;
+
+document.getElementById('checkAllVisible').onclick = () => {
+  for (const v of visibleList()) if (!v.done) pendingSkip[v.id] = true;
+  render();
+};
+document.getElementById('uncheckAllVisible').onclick = () => {
+  for (const v of visibleList()) if (!v.done) pendingSkip[v.id] = false;
+  render();
+};
+
+document.getElementById('btnSaveStatus').onclick = async () => {
+  const msg = document.getElementById('footerMsg');
+  if (!Object.keys(pendingSkip).length) { msg.textContent = '沒有變更'; return; }
+  msg.textContent = '儲存中...';
+  await fetch('/api/channel/status', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ updates: pendingSkip })
+  });
+  for (const v of all) if (v.id in pendingSkip) v.skip = pendingSkip[v.id];
+  pendingSkip = {};
+  msg.textContent = '✓ 已儲存';
+  render();
+};
+
+document.getElementById('btnBuildQueue').onclick = async () => {
+  const msg = document.getElementById('footerMsg');
+  if (Object.keys(pendingSkip).length) {
+    await document.getElementById('btnSaveStatus').onclick();
+  }
+  msg.textContent = '建立佇列中...';
+  const res = await fetch('/api/queue/build', { method: 'POST' }).then(r=>r.json());
+  msg.textContent = `✓ 已建立處理佇列，共 ${res.queued} 部影片排隊中`;
+};
+
+document.getElementById('btnStartBatch').onclick = async () => {
+  const msg = document.getElementById('footerMsg');
+  const res = await fetch('/api/batch/start', { method: 'POST' }).then(r=>r.json());
+  msg.textContent = res.already_running ? '處理程序已經在執行中' : '✓ 已開始處理，進度會顯示在上方';
+};
+
+async function pollProgress() {
+  try {
+    const p = await fetch('/api/queue/progress').then(r=>r.json());
+    const usage = p.gemini_usage || {};
+    const stageNames = {downloading:'下載音檔中', transcribing:'語音辨識中', building_srt:'產生字幕中', downloading_model:'下載中'};
+
+    // 轉錄/準備 row
+    const prepBar = document.getElementById('progressBarPrep');
+    let prepText;
+    if (p.gpu_error) {
+      prepText = `⚠️ 偵測不到 NVIDIA 顯示卡，無法進行語音轉錄：${p.gpu_error.split('\n')[0]}`;
+      prepBar.style.color = 'var(--lowconf)';
+    } else {
+      prepBar.style.color = '';
+      if (p.prep_current) {
+        prepText = `📝 轉錄準備：${p.prep_current.title || p.prep_current.id}（${stageNames[p.prep_current.stage] || p.prep_current.stage}）`;
+      } else if (p.stopped_reason === 'queue_complete') {
+        prepText = '📝 轉錄準備：✓ 佇列已全部準備完成';
+      } else {
+        prepText = '📝 轉錄準備：目前沒有在跑';
+      }
+    }
+    prepBar.innerHTML = `${prepText}　|　已轉錄 <b>${p.prep_done_count||0} / ${p.total||0}</b>`;
+
+    // Gemini 校正 row
+    const correctBar = document.getElementById('progressBarCorrect');
+    let correctText;
+    if (p.correction_current) {
+      correctText = `🤖 Gemini 校正：${p.correction_current.title || p.correction_current.id} 校正中`;
+    } else if (p.quota_exhausted_today) {
+      correctText = `🤖 Gemini 校正：✓ 今日額度已達標（剩 ${p.quota_remaining ?? 0} 次，不夠校正下一部，等明天重置）`;
+    } else if (usage.requests >= 480) {
+      correctText = '🤖 Gemini 校正：今日額度已用完，等重置';
+    } else {
+      correctText = '🤖 Gemini 校正：目前沒有在跑（可能在等轉錄準備出更多影片）';
+    }
+    correctBar.innerHTML = `${correctText}　|　已校正 <b>${p.corrected_done_count||0} / ${p.total||0}</b>　|　今日 Gemini 用量 <b>${usage.requests||0} / 480</b>`;
+  } catch (e) {}
+}
+pollProgress();
+setInterval(pollProgress, 10000);
+
+load();
+</script>
+</body>
+</html>

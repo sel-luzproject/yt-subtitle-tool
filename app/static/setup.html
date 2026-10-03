@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<title>初次設定</title>
+<style>
+  :root { --bg:#1a1b1e; --panel:#232428; --border:#33353a; --text:#e8e9ea; --muted:#8a8d93; --accent:#6c8dff; --err:#ff6464; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-system,"Segoe UI","Microsoft JhengHei",sans-serif;
+         display:flex; align-items:center; justify-content:center; min-height:100vh; }
+  #card { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:32px; width:480px; }
+  h1 { font-size:18px; margin:0 0 8px; }
+  p.sub { color:var(--muted); font-size:13px; margin:0 0 24px; line-height:1.6; }
+  label { display:block; font-size:13px; margin:18px 0 6px; color:var(--text); }
+  label .hint { color:var(--muted); font-size:11px; display:block; margin-top:2px; font-weight:normal; }
+  input[type=text], input[type=password] {
+    width:100%; background:#1a1b1e; border:1px solid var(--border); color:var(--text);
+    padding:10px 12px; border-radius:6px; font-size:14px;
+  }
+  button { width:100%; margin-top:26px; background:var(--accent); color:white; border:none;
+           padding:12px; border-radius:8px; cursor:pointer; font-size:14px; font-weight:600; }
+  button:hover { opacity:.88; }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  #msg { font-size:13px; margin-top:14px; min-height:18px; white-space:pre-line; line-height:1.6; }
+  #msg.err { color:var(--err); }
+  #msg.ok { color:#4caf7d; }
+  .disclaimer { font-size:11px; color:var(--muted); margin-top:20px; line-height:1.6; border-top:1px solid var(--border); padding-top:14px; }
+  a { color:var(--accent); }
+</style>
+</head>
+<body>
+<div id="card">
+  <h1>歡迎使用 YT 字幕機</h1>
+  <p class="sub">第一次使用需要設定兩件事：你的 Gemini API Key，以及要處理的 YouTube 頻道網址。設定完成後會自動抓取頻道影片清單。</p>
+
+  <label>Gemini API Key
+    <span class="hint">到 <a href="https://aistudio.google.com/apikey" target="_blank">Google AI Studio</a> 免費申請，複製貼上即可</span>
+  </label>
+  <input type="password" id="apiKey" placeholder="AIza...">
+
+  <label>YouTube 頻道網址
+    <span class="hint">例如 https://www.youtube.com/@你的頻道名稱</span>
+  </label>
+  <input type="text" id="channelUrl" placeholder="https://www.youtube.com/@...">
+
+  <button id="btnStart">開始設定</button>
+  <div id="msg"></div>
+
+  <div class="disclaimer">
+    本工具會下載並轉錄你指定頻道的 YouTube 影片音訊。請確認你有權處理這些內容，並自行遵守 YouTube 服務條款與 Google Gemini API 使用條款。
+  </div>
+</div>
+<script>
+const btn = document.getElementById('btnStart');
+const msg = document.getElementById('msg');
+
+btn.onclick = async () => {
+  const apiKey = document.getElementById('apiKey').value.trim();
+  const channelUrl = document.getElementById('channelUrl').value.trim();
+  if (!apiKey || !channelUrl) {
+    msg.className = 'err'; msg.textContent = '請把兩個欄位都填寫完整。';
+    return;
+  }
+  btn.disabled = true;
+  msg.className = ''; msg.textContent = '設定中，正在抓取頻道影片清單（可能需要幾十秒）...';
+  try {
+    const res = await fetch('/api/setup', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ gemini_api_key: apiKey, channel_url: channelUrl })
+    }).then(r => r.json());
+    if (!res.ok) {
+      msg.className = 'err'; msg.textContent = res.error || '設定失敗，請確認輸入內容。';
+      btn.disabled = false;
+      return;
+    }
+    if (!res.gpu_ok) {
+      msg.className = 'err';
+      msg.textContent = '設定已儲存，但偵測不到可用的 NVIDIA 顯示卡：' + res.gpu_msg +
+        '\n\n本工具需要 NVIDIA 顯示卡才能進行語音轉錄，請先確認顯示卡與驅動程式後再繼續。';
+      btn.disabled = false;
+      return;
+    }
+    msg.className = 'ok'; msg.textContent = '✓ 設定完成，已偵測到 NVIDIA 顯示卡！即將進入主畫面...';
+    setTimeout(() => { location.href = '/channel.html'; }, 1200);
+  } catch (e) {
+    msg.className = 'err'; msg.textContent = '發生錯誤：' + e;
+    btn.disabled = false;
+  }
+};
+</script>
+</body>
+</html>
