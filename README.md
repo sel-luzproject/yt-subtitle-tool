@@ -4,6 +4,15 @@
 
 > 一般使用者請看 [使用說明](packaging/使用說明.html)，並從 Releases 下載安裝程式。本頁給想自己從原始碼執行或打包的人。
 
+## 畫面預覽
+（以下為示範資料，非真實頻道）
+
+| 初次設定 | 頻道清單與處理進度 |
+|---|---|
+| ![初次設定](docs/images/01-setup.png) | ![頻道清單](docs/images/02-channel.png) |
+
+![校對介面：AI 修改處會標示原文，可篩選、編輯並匯出 SRT](docs/images/03-review.png)
+
 ## 系統需求
 - Windows 10/11 64 位元
 - **NVIDIA 顯示卡**（需 CUDA；不支援 CPU 模式）
